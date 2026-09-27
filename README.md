@@ -7,16 +7,16 @@ version to the terminal.
 ## Install
 
 ```
-pip install .                                              # from a local clone
-pip install git+https://github.com/SE4CPS/releasetrain-inventory.git   # straight from GitHub
+pip install releasetrain-inventory
 ```
 
-This isn't published to PyPI (yet), so `pip install releasetrain-inventory`
-alone won't find it - use one of the two forms above.
+Also installable from source (`pip install .` from a local clone) or straight
+from GitHub (`pip install git+https://github.com/SE4CPS/releasetrain-inventory.git`).
 
 Installing gives you the `releasetrain-inventory` command; `python -m
 releasetrain_inventory` works the same way without needing a console-script
-shim on `PATH`.
+shim on `PATH` (useful right after a `pip install --user` on Linux, where
+pip warns the script directory isn't on `PATH` yet).
 
 ## Usage
 
@@ -36,8 +36,30 @@ releasetrain-inventory [options]
 | `--all` | also include entries with no detected version (shown as `-`); hidden by default |
 | `--include-packages` | Linux only: also list manually-installed OS packages (apt/dnf/pacman); off by default |
 | `--exec-version` | Linux only: last resort, run an app's own `--version` when its package can't supply one; off by default since it executes the binary |
+| `--no-os` | don't include the operating system itself as an entry; included by default |
+| `--dev-tools` | also check well-known CLI runtimes/services on `PATH` (see below); off by default since it executes each one found |
 | `-v, --verbose` | print scan diagnostics to stderr |
 | `--version` | print the installed package version and exit |
+
+### The operating system itself, and CLI runtimes/services
+
+Neither of these fit the "installed software" model the rest of this tool
+uses (a package, an app bundle, a desktop launcher), so they're handled as
+two small, separate additions:
+
+- **The OS itself** (`--no-os` to turn off) — included as one entry by
+  default: `Windows 11 Pro` / `macOS` / whatever `/etc/os-release`'s `NAME`
+  says on Linux, with its real version. This is what most people expect
+  "installed software" to include and none of the other scans produce it.
+- **`--dev-tools`** — a fixed, curated list of well-known CLI runtimes and
+  services checked via `shutil.which` + their own `--version`/`-v`, since
+  none of them have a desktop entry, a Windows Uninstall key, or necessarily
+  even an OS package (installed via `nvm`, a language's own installer, a
+  static binary, `docker`'s own install script, ...). This is most useful on
+  a Linux server, where a plain scan finds nothing at all beyond
+  `--include-packages`. Current list: `node`, `npm`, `python3`, `python`,
+  `git`, `nginx`, `apache2`/`httpd`, `mysql`, `psql`, `redis-server`,
+  `docker`, `java`, `go`, `ruby`, `php`, `rustc`, `dotnet`.
 
 ## Uploading to your ReleaseTrain account
 

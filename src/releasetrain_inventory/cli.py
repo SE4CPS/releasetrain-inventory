@@ -188,6 +188,63 @@ def _resolve_binary(exec_line: str) -> str | None:
     return shutil.which(token)
 
 
+def _run_combined(cmd: list[str], timeout: float = 3.0) -> str:
+    """Like _run, but also includes stderr: several tools (nginx, java) print
+    their --version banner there instead of stdout."""
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
+        return (out.stdout + "\n" + out.stderr).strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+# Well-known CLI runtimes/services that never show up in any of the scans
+# above: no desktop entry (no menu icon), no Windows registry Uninstall key,
+# and often not an OS package either (nvm, a language's own installer, a
+# static binary, docker's own install script, ...). Opt-in via --dev-tools
+# since it means actually executing each one found on PATH, same reasoning
+# as --exec-version. Cross-platform (shutil.which + subprocess work the same
+# on Windows/macOS/Linux), though the motivating case is a Linux server,
+# where "what's actually running here" (node, python, nginx, ...) is exactly
+# what a user of this tool cares about and the desktop/package scans miss.
+DEV_TOOLS: list[tuple[str, list[str], str]] = [
+    ("node", ["--version"], r"v?(\d+(?:\.\d+){1,3})"),
+    ("npm", ["--version"], r"(\d+(?:\.\d+){1,3})"),
+    ("python3", ["--version"], r"(\d+(?:\.\d+){1,3})"),
+    ("python", ["--version"], r"(\d+(?:\.\d+){1,3})"),
+    ("git", ["--version"], r"(\d+(?:\.\d+){1,3})"),
+    ("nginx", ["-v"], r"nginx/(\d+(?:\.\d+){1,3})"),
+    ("apache2", ["-v"], r"Apache/(\d+(?:\.\d+){1,3})"),
+    ("httpd", ["-v"], r"Apache/(\d+(?:\.\d+){1,3})"),
+    ("mysql", ["--version"], r"(\d+(?:\.\d+){1,3})"),
+    ("psql", ["--version"], r"(\d+(?:\.\d+){1,3})"),
+    ("redis-server", ["--version"], r"v=(\d+(?:\.\d+){1,3})"),
+    ("docker", ["--version"], r"(\d+(?:\.\d+){1,3})"),
+    ("java", ["-version"], r'"(\d+(?:\.\d+){1,3}[^"]*)"'),
+    ("go", ["version"], r"go(\d+(?:\.\d+){1,2})"),
+    ("ruby", ["--version"], r"(\d+(?:\.\d+){1,3})"),
+    ("php", ["--version"], r"(\d+(?:\.\d+){1,3})"),
+    ("rustc", ["--version"], r"(\d+(?:\.\d+){1,3})"),
+    ("dotnet", ["--version"], r"(\d+(?:\.\d+){1,3})"),
+]
+
+
+def scan_dev_tools(verbose: bool = False) -> list[App]:
+    apps: list[App] = []
+    for name, args, version_rx in DEV_TOOLS:
+        path = shutil.which(name)
+        if not path:
+            continue
+        out = _run_combined([path, *args])
+        m = re.search(version_rx, out)
+        if not m:
+            continue
+        apps.append(App(name=name, version=m.group(1), publisher="-", source="dev-tool", location=path))
+    if verbose:
+        print(f"[scan] dev-tools: {len(apps)} of {len(DEV_TOOLS)} known tools found on PATH", file=sys.stderr)
+    return apps
+
+
 def _run(cmd: list[str], timeout: float = 2.0) -> str:
     try:
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
@@ -296,18 +353,84 @@ def scan_linux_manual_packages(verbose: bool = False) -> list[App]:
     return apps
 
 
-def scan(verbose: bool = False, include_packages: bool = False, exec_version: bool = False) -> list[App]:
+def _parse_os_release() -> dict[str, str]:
+    fields: dict[str, str] = {}
+    try:
+        lines = Path("/etc/os-release").read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return fields
+    for line in lines:
+        if "=" not in line or line.strip().startswith("#"):
+            continue
+        key, _, value = line.partition("=")
+        fields[key.strip()] = value.strip().strip('"').strip("'")
+    return fields
+
+
+def scan_os_entry(verbose: bool = False) -> list[App]:
+    """The operating system itself, as one entry. It's not a package, app
+    bundle, or desktop launcher, so none of the scans above ever produce it,
+    but "what OS/version is this" is exactly the kind of fact a real
+    inventory (especially of a headless server) is otherwise missing. On by
+    default; skip with --no-os."""
     system = platform.system()
     if system == "Windows":
-        return scan_windows(verbose=verbose)
+        try:
+            import winreg
+            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion")
+        except OSError:
+            return []
+        with key:
+            def get(field: str) -> str:
+                try:
+                    return str(winreg.QueryValueEx(key, field)[0])
+                except OSError:
+                    return ""
+            name = get("ProductName") or "Windows"
+            display = get("DisplayVersion") or get("ReleaseId")
+            build, ubr = get("CurrentBuildNumber"), get("UBR")
+            # No parens/commas: keeps this upload-safe (see _rt_valid_version)
+            # without a separate sanitize step for just this one entry.
+            build_part = f"{build}.{ubr}" if build and ubr else build
+            version = f"{display}-{build_part}" if display and build_part else (display or build_part or "-")
+        if verbose:
+            print(f"[scan] os: {name} {version}", file=sys.stderr)
+        return [App(name=name, version=version, publisher="Microsoft Corporation", source="os", location="-")]
     if system == "Darwin":
-        return scan_macos(verbose=verbose)
+        release = platform.mac_ver()[0]
+        if not release:
+            return []
+        if verbose:
+            print(f"[scan] os: macOS {release}", file=sys.stderr)
+        return [App(name="macOS", version=release, publisher="Apple", source="os", location="-")]
     if system == "Linux":
+        fields = _parse_os_release()
+        name = fields.get("NAME") or "Linux"
+        version = fields.get("VERSION_ID") or platform.release() or "-"
+        if verbose:
+            print(f"[scan] os: {name} {version}", file=sys.stderr)
+        return [App(name=name, version=version, publisher="-", source="os", location="/etc/os-release")]
+    return []
+
+
+def scan(verbose: bool = False, include_packages: bool = False, exec_version: bool = False,
+         include_os: bool = True, dev_tools: bool = False) -> list[App]:
+    system = platform.system()
+    if system == "Windows":
+        apps = scan_windows(verbose=verbose)
+    elif system == "Darwin":
+        apps = scan_macos(verbose=verbose)
+    elif system == "Linux":
         apps = scan_linux(verbose=verbose, exec_version=exec_version)
         if include_packages:
             apps += scan_linux_manual_packages(verbose=verbose)
-        return apps
-    raise SystemExit(f"Unsupported platform: {system!r}")
+    else:
+        raise SystemExit(f"Unsupported platform: {system!r}")
+    if include_os:
+        apps = scan_os_entry(verbose=verbose) + apps
+    if dev_tools:
+        apps += scan_dev_tools(verbose=verbose)
+    return apps
 
 
 # --------------------------------------------------------------------------
@@ -721,6 +844,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--exec-version", action="store_true",
                          help="Linux only: if a package can't supply a version, try running the app's own "
                               "--version as a last resort (off by default, since it executes the binary)")
+    parser.add_argument("--no-os", action="store_true",
+                         help="don't include the operating system itself as an entry (included by default)")
+    parser.add_argument("--dev-tools", action="store_true",
+                         help="also check well-known CLI runtimes/services on PATH (node, python, git, nginx, "
+                              "docker, ...) by running their own --version; off by default, since it executes "
+                              "each one found (see README for the exact list)")
     parser.add_argument("-v", "--verbose", action="store_true", help="print scan diagnostics to stderr")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
 
@@ -748,7 +877,8 @@ def main(argv: list[str] | None = None) -> int:
     upload_group.add_argument("--dry-run", action="store_true", help="show what would be uploaded without contacting the server")
     args = parser.parse_args(argv)
 
-    apps = scan(verbose=args.verbose, include_packages=args.include_packages, exec_version=args.exec_version)
+    apps = scan(verbose=args.verbose, include_packages=args.include_packages, exec_version=args.exec_version,
+                include_os=not args.no_os, dev_tools=args.dev_tools)
 
     if args.filter:
         needle = args.filter.lower()
