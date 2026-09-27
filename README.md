@@ -1,13 +1,27 @@
 # releasetrain-inventory
 
-A single-file, stdlib-only Python script that scans the local machine for
-installed **software** (not OS/library packages) and prints each one's name
-and version to the terminal.
+A stdlib-only Python package that scans the local machine for installed
+**software** (not OS/library packages) and prints each one's name and
+version to the terminal.
+
+## Install
+
+```
+pip install .                                              # from a local clone
+pip install git+https://github.com/SE4CPS/releasetrain-inventory.git   # straight from GitHub
+```
+
+This isn't published to PyPI (yet), so `pip install releasetrain-inventory`
+alone won't find it - use one of the two forms above.
+
+Installing gives you the `releasetrain-inventory` command; `python -m
+releasetrain_inventory` works the same way without needing a console-script
+shim on `PATH`.
 
 ## Usage
 
 ```
-python inventory.py [options]
+releasetrain-inventory [options]
 ```
 
 | Flag | Effect |
@@ -23,6 +37,7 @@ python inventory.py [options]
 | `--include-packages` | Linux only: also list manually-installed OS packages (apt/dnf/pacman); off by default |
 | `--exec-version` | Linux only: last resort, run an app's own `--version` when its package can't supply one; off by default since it executes the binary |
 | `-v, --verbose` | print scan diagnostics to stderr |
+| `--version` | print the installed package version and exit |
 
 ## Uploading to your ReleaseTrain account
 
@@ -31,7 +46,7 @@ account's Installed versions (Account page > Installed versions), merging
 with what's already saved unless `--no-merge` is given.
 
 ```
-python inventory.py --upload --email you@example.com
+releasetrain-inventory --upload --email you@example.com
 ```
 
 | Flag | Effect |
@@ -133,3 +148,13 @@ Cooperation" still strips as "Microsoft"), then matching whatever's left:
   explicitly asked to install (not their dependencies).
 
 No third-party dependencies; only the Python standard library is used.
+
+## Development
+
+```
+pip install -e .          # editable install, picks up source edits immediately
+python -m pyflakes src/releasetrain_inventory/*.py
+```
+
+The package lives under `src/releasetrain_inventory/` (`cli.py` holds all the
+logic; `__main__.py` just wires up `python -m releasetrain_inventory`).

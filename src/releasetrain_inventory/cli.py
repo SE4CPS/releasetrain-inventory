@@ -31,6 +31,8 @@ from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
+from . import __version__
+
 
 @dataclass
 class App:
@@ -702,7 +704,7 @@ def print_table(apps: list[App], show_header: bool = True) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="inventory",
+        prog="releasetrain-inventory",
         description="Scan this machine for installed software (not OS/library packages) and print name + version.",
     )
     parser.add_argument("--json", action="store_true", help="print results as a JSON array instead of a table")
@@ -720,6 +722,7 @@ def main(argv: list[str] | None = None) -> int:
                          help="Linux only: if a package can't supply a version, try running the app's own "
                               "--version as a last resort (off by default, since it executes the binary)")
     parser.add_argument("-v", "--verbose", action="store_true", help="print scan diagnostics to stderr")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
 
     upload_group = parser.add_argument_group("upload to ReleaseTrain")
     upload_group.add_argument("--upload", action="store_true",
