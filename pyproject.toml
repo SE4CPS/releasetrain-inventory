@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "releasetrain-inventory"
-version = "0.2.0"
-description = "Cross-platform scanner for installed software (not OS/library packages) and their versions, with optional upload to a ReleaseTrain account."
+version = "0.3.0"
+description = "Cross-platform scanner for installed software (not OS/library packages) and their versions, with SBOM output (CycloneDX, SPDX) and optional upload to a ReleaseTrain account."
 readme = "README.md"
 requires-python = ">=3.8"
 license = "MIT"
 authors = [{ name = "SE4CPS" }]
-keywords = ["inventory", "software", "versions", "releasetrain", "cli", "sysadmin"]
+keywords = ["inventory", "software", "versions", "releasetrain", "cli", "sysadmin", "sbom", "cyclonedx", "spdx"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",

@@ -806,6 +806,29 @@ def rt_upload(apps: list[App], api_base: str, args: argparse.Namespace) -> None:
 # --------------------------------------------------------------------------
 # Output
 # --------------------------------------------------------------------------
+def _linux_package_manager() -> str | None:
+    """The manager _package_version_for_binary resolves desktop entries with
+    (same order: dpkg, rpm, pacman), for the SBOM's package URLs."""
+    if platform.system() != "Linux":
+        return None
+    for tool, label in (("dpkg", "dpkg"), ("rpm", "rpm"), ("pacman", "pacman")):
+        if shutil.which(tool):
+            return label
+    return None
+
+
+def render_sbom(apps: list[App], fmt: str, args: argparse.Namespace) -> dict:
+    """The scan as a CycloneDX or SPDX SBOM. The machine is named by --machine
+    when given, else the host name; nothing is uploaded or prompted for."""
+    from .sbom import to_cyclonedx, to_spdx
+    machine = (getattr(args, "machine", None) or platform.node() or "unknown-host").strip()
+    osr = _parse_os_release() if platform.system() == "Linux" else {}
+    kw = dict(tool_version=__version__, machine=machine, os_name=rt_os_label(),
+              manager=_linux_package_manager(), distro=osr.get("ID") or None,
+              codename=osr.get("VERSION_CODENAME") or osr.get("VERSION_ID") or None)
+    return to_cyclonedx(apps, **kw) if fmt == "cyclonedx" else to_spdx(apps, **kw)
+
+
 def print_table(apps: list[App], show_header: bool = True) -> None:
     if not apps:
         print("No software found.")
@@ -830,7 +853,9 @@ def main(argv: list[str] | None = None) -> int:
         prog="releasetrain-inventory",
         description="Scan this machine for installed software (not OS/library packages) and print name + version.",
     )
-    parser.add_argument("--json", action="store_true", help="print results as a JSON array instead of a table")
+    parser.add_argument("--json", action="store_true", help="print results as a JSON array instead of a table (same as --format json)")
+    parser.add_argument("--format", choices=["table", "json", "cyclonedx", "spdx"], default=None,
+                        help="output format: table (default), json, or an SBOM as CycloneDX 1.6 JSON or SPDX 2.3 JSON")
     parser.add_argument("--filter", metavar="TEXT", help="only show entries whose name contains TEXT (case-insensitive)")
     parser.add_argument("--sort", choices=["name", "version", "publisher"], default="name", help="sort key (default: name)")
     parser.add_argument("--reverse", action="store_true", help="reverse the sort order")
@@ -892,8 +917,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.limit is not None:
         apps = apps[: args.limit]
 
-    if args.json:
+    fmt = args.format or ("json" if args.json else "table")
+    if fmt == "json":
         rendered = json.dumps([asdict(a) for a in apps], indent=2)
+    elif fmt in ("cyclonedx", "spdx"):
+        rendered = json.dumps(render_sbom(apps, fmt, args), indent=2)
     else:
         import io
         buf = io.StringIO()

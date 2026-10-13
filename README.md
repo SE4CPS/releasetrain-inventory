@@ -26,7 +26,8 @@ releasetrain-inventory [options]
 
 | Flag | Effect |
 |---|---|
-| `--json` | print a JSON array instead of a table |
+| `--json` | print a JSON array instead of a table (same as `--format json`) |
+| `--format {table,json,cyclonedx,spdx}` | output format; `cyclonedx` and `spdx` write an SBOM (see below) |
 | `--filter TEXT` | only show names containing TEXT (case-insensitive) |
 | `--sort {name,version,publisher}` | sort key (default: `name`) |
 | `--reverse` | reverse the sort order |
@@ -60,6 +61,36 @@ two small, separate additions:
   `--include-packages`. Current list: `node`, `npm`, `python3`, `python`,
   `git`, `nginx`, `apache2`/`httpd`, `mysql`, `psql`, `redis-server`,
   `docker`, `java`, `go`, `ruby`, `php`, `rustc`, `dotnet`.
+
+## SBOM output (CycloneDX and SPDX)
+
+```
+releasetrain-inventory --format cyclonedx -o machine.cdx.json
+releasetrain-inventory --format spdx --include-packages -o machine.spdx.json
+```
+
+`--format cyclonedx` writes a [CycloneDX 1.6](https://cyclonedx.org/) JSON
+BOM and `--format spdx` an [SPDX 2.3](https://spdx.dev/) JSON document, so
+other tools (vulnerability scanners, dependency-tracking platforms, patch
+status checkers) can read the inventory in a standard Software Bill of
+Materials format. The scanned machine is the root (named by `--machine`, else
+the host name) and every entry is a component/package under it.
+
+- **Package URLs only when certain.** Linux entries backed by a real OS
+  package (`--include-packages`, and desktop launchers resolved through
+  dpkg/rpm/pacman) get a canonical purl such as
+  `pkg:deb/ubuntu/auditd@1:3.1.2-2.1build1.1?distro=noble`. Windows registry
+  entries, macOS app bundles and `--dev-tools` get no purl and no CPE: a
+  guessed vendor/product identifier would make vulnerability matching worse,
+  since a scanner trusts it.
+- **Publisher vs package.** A real publisher (Windows registry, macOS bundle)
+  becomes the CycloneDX `publisher` / SPDX `supplier`; on Linux the owning
+  package is recorded as the purl and a `releasetrain:package` property, never
+  as a publisher.
+- **Scan details are kept** as `releasetrain:source` / `releasetrain:location`
+  properties (SPDX: the package comment).
+- Stdlib only, nothing is uploaded or prompted for. Both outputs validate
+  against the official CycloneDX 1.6 schema and the SPDX 2.3 validator.
 
 ## Uploading to your ReleaseTrain account
 
@@ -178,5 +209,10 @@ pip install -e .          # editable install, picks up source edits immediately
 python -m pyflakes src/releasetrain_inventory/*.py
 ```
 
-The package lives under `src/releasetrain_inventory/` (`cli.py` holds all the
-logic; `__main__.py` just wires up `python -m releasetrain_inventory`).
+The package lives under `src/releasetrain_inventory/` (`cli.py` holds the
+scanner and CLI, `sbom.py` the CycloneDX/SPDX writers; `__main__.py` just wires
+up `python -m releasetrain_inventory`). Tests (stdlib `unittest`, no network):
+
+```
+python -m unittest discover -s tests
+```
