@@ -216,3 +216,7 @@ up `python -m releasetrain_inventory`). Tests (stdlib `unittest`, no network):
 ```
 python -m unittest discover -s tests
 ```
+
+## License
+
+MIT. See [LICENSE](LICENSE).
