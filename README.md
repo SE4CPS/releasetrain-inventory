@@ -48,11 +48,11 @@ Neither of these fit the "installed software" model the rest of this tool
 uses (a package, an app bundle, a desktop launcher), so they're handled as
 two small, separate additions:
 
-- **The OS itself** (`--no-os` to turn off) — included as one entry by
+- **The OS itself** (`--no-os` to turn off): included as one entry by
   default: `Windows 11 Pro` / `macOS` / whatever `/etc/os-release`'s `NAME`
   says on Linux, with its real version. This is what most people expect
   "installed software" to include and none of the other scans produce it.
-- **`--dev-tools`** — a fixed, curated list of well-known CLI runtimes and
+- **`--dev-tools`**: a fixed, curated list of well-known CLI runtimes and
   services checked via `shutil.which` + their own `--version`/`-v`, since
   none of them have a desktop entry, a Windows Uninstall key, or necessarily
   even an OS package (installed via `nvm`, a language's own installer, a
@@ -92,7 +92,7 @@ the host name) and every entry is a component/package under it.
 - Stdlib only, nothing is uploaded or prompted for. Both outputs validate
   against the official CycloneDX 1.6 schema and the SPDX 2.3 validator.
 
-## Uploading to your ReleaseTrain account
+## Uploading to your releasetrain account
 
 `--upload` sends whatever the current filters/sort/limit are showing to your
 account's Installed versions (Account page > Installed versions), merging
@@ -107,7 +107,7 @@ releasetrain-inventory --upload --email you@example.com
 | `--upload` | upload the currently-shown results |
 | `--email EMAIL` | account email (or set `RELEASETRAIN_EMAIL`) |
 | `--token TOKEN` | use this token instead of logging in (or set `RELEASETRAIN_TOKEN`) |
-| `--map-file FILE` | JSON `{"scanned name": "ReleaseTrain component"}` overrides (default `~/.releasetrain/component-map.json`) |
+| `--map-file FILE` | JSON `{"scanned name": "releasetrain component"}` overrides (default `~/.releasetrain/component-map.json`) |
 | `--strict-match` | only upload entries that matched a tracked component name; drop unconfirmed guesses instead of uploading them |
 | `--machine LABEL` | label for this computer (default: auto-detected hostname + OS, remembered in `~/.releasetrain/machine.json`) |
 | `--no-machine` | don't tag uploaded entries with a machine label |
@@ -128,24 +128,24 @@ Each uploaded entry can carry two more, optional fields (the server accepts
 and stores both, and the Account page's Installed versions list displays and
 lets you edit them):
 
-- **`vendor`** — the cleaned publisher name (e.g. `Google`, `VMware`),
-  derived from the scanned `Publisher` field. ReleaseTrain itself only
+- **`vendor`**: the cleaned publisher name (e.g. `Google`, `VMware`),
+  derived from the scanned `Publisher` field. releasetrain itself only
   tracks a bare product name with no publisher field of its own, so this
-  isn't "matched" against anything on ReleaseTrain's side — it's just
+  isn't "matched" against anything on releasetrain's side: it's just
   recorded alongside the component so a name that couldn't be confidently
   matched to a tracked component (see below) still says *whose* it is,
   instead of, say, a bare, ambiguous `Host`.
-- **`machine`** — a label for the computer this was scanned on (default:
+- **`machine`**: a label for the computer this was scanned on (default:
   auto-detected `hostname (OS)`, e.g. `DESKTOP-ABC123 (Windows 11)`,
   remembered across runs; override with `--machine "Work Laptop"`). This
   matters the moment you run the scanner on more than one computer: the
   same component (`node`, say) at two different versions on two machines
   is recorded as two separate rows instead of one overwriting the other.
-- **`recordedAt`** — when *this* row's version was actually captured: one
+- **`recordedAt`**: when *this* row's version was actually captured: one
   timestamp shared by every entry in a given run, set fresh each time you
   scan and upload. Shown in the Account page as "recorded Xh ago". This is
   distinct from the drift row's own "checked Xh ago" stamp, which is when
-  ReleaseTrain last saw the *latest* release for that component, not when
+  releasetrain last saw the *latest* release for that component, not when
   your own snapshot was taken.
 
 Both fields are part of each entry's uniqueness key, both on upload and in
@@ -156,32 +156,32 @@ machines can coexist.
 
 ### Why component names need matching, not just uploading as-is
 
-ReleaseTrain tracks a bare product name only (e.g. `Chrome`, `VirtualBox`)
+releasetrain tracks a bare product name only (e.g. `Chrome`, `VirtualBox`)
 and matches your saved entries against it case-insensitively, exact string
-only — there's no separate publisher/vendor field on ReleaseTrain's side to
+only: there's no separate publisher/vendor field on releasetrain's side to
 map a `Publisher` value onto. A local scan's name is rarely that bare,
 though: the vendor is often baked into the product name itself ("Oracle
 VirtualBox 7.2.16"), or sits only in `Publisher` while the product name
 never had it ("Microsoft Edge" already needs no stripping, but many others
-do). So the fix isn't mapping `Publisher` to anything on ReleaseTrain — it's
+do). So the fix isn't mapping `Publisher` to anything on releasetrain: it's
 using `Publisher` to recognize and strip the vendor prefix off the product
 name (tolerating typos on either side, e.g. a `Publisher` of "Mircosoft
 Cooperation" still strips as "Microsoft"), then matching whatever's left:
 
-1. **Your map file** — an exact override you maintain, checked first.
+1. **Your map file**: an exact override you maintain, checked first.
 2. **Exact match** against `/api/c/names` (case-insensitive).
-3. **Normalized match** — vendor prefix and version/edition noise stripped,
+3. **Normalized match**: vendor prefix and version/edition noise stripped,
    then compared again.
-4. **Fuzzy match** — a close (but not exact) match against a tracked name.
-5. **Unmatched** — uploaded under the **original scanned name** (not the
+4. **Fuzzy match**: a close (but not exact) match against a tracked name.
+5. **Unmatched**: uploaded under the **original scanned name** (not the
    stripped guess, which is shown only for diagnostics) so a name that
    didn't actually confirm against anything stays self-explanatory (e.g.
    `VMware Host`, `vendor: VMware`) instead of collapsing to an ambiguous
    bare `Host`. Listed in the summary so you can add a `--map-file` entry
    if you'd still rather it use a different component name.
    `/api/c/names` only returns *recently active* components, so plenty of
-   legitimate software will land here just because ReleaseTrain hasn't
-   tracked a release for it lately — pass `--strict-match` if you'd rather
+   legitimate software will land here just because releasetrain hasn't
+   tracked a release for it lately: pass `--strict-match` if you'd rather
    drop those than upload an unconfirmed one.
 
 ## How it finds "software," not packages, per OS
